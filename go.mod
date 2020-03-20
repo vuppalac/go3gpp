@@ -1,3 +1,3 @@
-module github.com/go3gpp
+module github.com/vuppalac/go3gpp
 
 go 1.13
