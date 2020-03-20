@@ -4,41 +4,6 @@ import (
 	"crypto/aes"
 )
 
-// Milenage .
-type Milenage struct {
-	K    []byte
-	OP   []byte
-	OPc  []byte
-	AMF  []byte
-	SQN  []byte
-	RAND []byte
-}
-
-// New function Creates new instance of Milenage struct, which calculates OPc from OP and K
-func New(k, op, rand, sqn, amf []byte) (*Milenage, error) {
-
-	opc, err := ComputeOPc(op, k)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewWithOPc(k, opc, rand, sqn, amf), nil
-}
-
-// NewWithOPc function Creates new instance of Milenage struct using OPc ins
-func NewWithOPc(k, opc, rand, sqn, amf []byte) *Milenage {
-
-	m := &Milenage{
-		K:    k,
-		OPc:  opc,
-		RAND: rand,
-		SQN:  sqn,
-		AMF:  amf,
-	}
-
-	return m
-}
-
 // ComputeOPc function calculate OPc based on OP and K
 func ComputeOPc(op, k []byte) ([]byte, error) {
 	opc := make([]byte, 16)
@@ -54,13 +19,12 @@ func ComputeOPc(op, k []byte) ([]byte, error) {
 	}
 
 	return opc, nil
-
 }
 
 // F1 function implements the F1 function of milenage algo defined in TS 35.205 and TS 35.206
-func (m *Milenage) F1() ([]byte, error) {
+func F1(k, opc, rand, sqn, amf []byte) ([]byte, error) {
 
-	out1, err := m.f1base()
+	out1, err := f1base(k, opc, rand, sqn, amf)
 
 	if err != nil {
 		return nil, err
@@ -71,21 +35,43 @@ func (m *Milenage) F1() ([]byte, error) {
 	return maca, nil
 }
 
-// F2345 function implements the F2, F3, F4, F5 functions of milenage algo defined in TS 35.205 and TS 35.206
-func (m *Milenage) F2345() (res, ck, ik, ak []byte, err error) {
+// F5 function implements the F5 function of milenage algo defined in TS 35.205 and TS 35.206
+func F5(k, opc, rand []byte) ([]byte, error) {
 
+	var ak []byte
 	rInput := make([]byte, 16)
-	tmp, _ := calcTemp(m.RAND, m.OPc, m.K)
+	tmp, _ := calcTemp(rand, opc, k)
 
 	for i := 0; i < 16; i++ {
-		rInput[i] = tmp[i] ^ m.OPc[i]
+		rInput[i] = tmp[i] ^ opc[i]
 	}
 	rInput[15] ^= 1
 
-	out2, _ := encrypt(rInput, m.K)
+	out2, _ := encrypt(rInput, k)
 
 	for i := 0; i < 16; i++ {
-		out2[i] ^= m.OPc[i]
+		out2[i] ^= opc[i]
+	}
+	ak = out2[:6]
+
+	return ak, nil
+}
+
+// F2345 function implements the F2, F3, F4, F5 functions of milenage algo defined in TS 35.205 and TS 35.206
+func F2345(k, opc, rand []byte) (res, ck, ik, ak []byte, err error) {
+
+	rInput := make([]byte, 16)
+	tmp, _ := calcTemp(rand, opc, k)
+
+	for i := 0; i < 16; i++ {
+		rInput[i] = tmp[i] ^ opc[i]
+	}
+	rInput[15] ^= 1
+
+	out2, _ := encrypt(rInput, k)
+
+	for i := 0; i < 16; i++ {
+		out2[i] ^= opc[i]
 	}
 
 	res = out2[8:]
@@ -95,30 +81,36 @@ func (m *Milenage) F2345() (res, ck, ik, ak []byte, err error) {
 	// rotate by r3=32, and XOR on the constant c3 (which
 	// is all zeroes except that the next to last bit is 1).
 	for i := 0; i < 16; i++ {
-		rInput[(i+12)%16] = tmp[i] ^ m.OPc[i]
+		rInput[(i+12)%16] = tmp[i] ^ opc[i]
 	}
 	rInput[15] ^= 2
 
-	out3, _ := encrypt(rInput, m.K)
+	out3, _ := encrypt(rInput, k)
+	for i := 0; i < 16; i++ {
+		out3[i] ^= opc[i]
+	}
 	ck = out3[:]
 
 	// To obtain output block OUT4: XOR OPc and TEMP,
 	// rotate by r4=64, and XOR on the constant c4 (which
 	// is all zeroes except that the 2nd from last bit is 1).
 	for i := 0; i < 16; i++ {
-		rInput[(i+8)%16] = tmp[i] ^ m.OPc[i]
+		rInput[(i+8)%16] = tmp[i] ^ opc[i]
 	}
 	rInput[15] ^= 4
 
-	out4, _ := encrypt(rInput, m.K)
+	out4, _ := encrypt(rInput, k)
+	for i := 0; i < 16; i++ {
+		out4[i] ^= opc[i]
+	}
 	ik = out4[:]
 	return
 }
 
 // F1Star function implements the F1* function of milenage algo defined in TS 35.205 and TS 35.206
-func (m *Milenage) F1Star() ([]byte, error) {
+func F1Star(k, opc, rand, sqn, amf []byte) ([]byte, error) {
 
-	out1, err := m.f1base()
+	out1, err := f1base(k, opc, rand, sqn, amf)
 
 	if err != nil {
 		return nil, err
@@ -130,19 +122,19 @@ func (m *Milenage) F1Star() ([]byte, error) {
 }
 
 // F5Star function implements the F5* function of milenage algo defined in TS 35.205 and TS 35.206
-func (m *Milenage) F5Star() ([]byte, error) {
+func F5Star(k, opc, rand []byte) ([]byte, error) {
 	rInput := make([]byte, 16)
-	tmp, _ := calcTemp(m.RAND, m.OPc, m.K)
+	tmp, _ := calcTemp(rand, opc, k)
 
 	for i := 0; i < 16; i++ {
-		rInput[(i+4)%16] = tmp[i] ^ m.OPc[i]
+		rInput[(i+4)%16] = tmp[i] ^ opc[i]
 	}
 	rInput[15] ^= 8
 
-	out5, _ := encrypt(rInput, m.K)
+	out5, _ := encrypt(rInput, k)
 
 	for i := 0; i < 16; i++ {
-		out5[i] ^= m.OPc[i]
+		out5[i] ^= opc[i]
 	}
 
 	ak := out5[:6]
@@ -150,11 +142,11 @@ func (m *Milenage) F5Star() ([]byte, error) {
 	return ak, nil
 }
 
-func (m *Milenage) f1base() ([]byte, error) {
+func f1base(k, opc, rand, sqn, amf []byte) ([]byte, error) {
 	rInput := make([]byte, 16)
 	var in1 []byte
 
-	tmp, err := calcTemp(m.RAND, m.OPc, m.K)
+	tmp, err := calcTemp(rand, opc, k)
 	if err != nil {
 		return nil, err
 	}
@@ -169,15 +161,17 @@ func (m *Milenage) f1base() ([]byte, error) {
 	// 	in1[i+14] = m.AMF[i]
 	// }
 
-	in1 = append(in1, m.SQN...)
-	in1 = append(in1, m.AMF...)
-	in1 = append(in1, m.SQN...)
-	in1 = append(in1, m.AMF...)
+	// in1 = append(append(append(append(in1, sqn...), amf...), sqn...), amf...)
+
+	in1 = append(in1, sqn...)
+	in1 = append(in1, amf...)
+	in1 = append(in1, sqn...)
+	in1 = append(in1, amf...)
 
 	// XOR op_c and in1, rotate by r1=64, and XOR
 	// on the constant c1 (which is all zeroes)
 	for i := 0; i < 16; i++ {
-		rInput[(i+8)%16] = in1[i] ^ m.OPc[i]
+		rInput[(i+8)%16] = in1[i] ^ opc[i]
 	}
 
 	// XOR on the value temp computed before
@@ -186,20 +180,16 @@ func (m *Milenage) f1base() ([]byte, error) {
 		rInput[i] ^= tmp[i]
 	}
 
-	out1, err := encrypt(rInput, m.K)
+	out1, err := encrypt(rInput, k)
 	if err != nil {
 		return nil, err
 	}
 
 	for i := 0; i < 16; i++ {
-		out1[i] ^= m.OPc[i]
+		out1[i] ^= opc[i]
 	}
 
 	return out1, nil
-}
-func (m *Milenage) computeOPc() (err error) {
-	m.OPc, err = ComputeOPc(m.OP, m.K)
-	return
 }
 
 func encrypt(input, k []byte) ([]byte, error) {
