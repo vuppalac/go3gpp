@@ -1,3 +1,3 @@
-# go3gpp - Set of 3gpp related algo and protocol implementation
-# milenage
+# go3gpp - 3gpp related spec implementation
+# milenage module
 Implements the 3gpp TS35.206
