@@ -9,7 +9,7 @@ package main
 import (
     "fmt"
     "bytes"
-	"encoding/hex"
+    "encoding/hex"
 
     "github.com/vuppalac/go3gpp/milenage"
 )
@@ -39,8 +39,8 @@ func TestMilenage(t *testing.T) {
 	sqn, _ := hex.DecodeString(SQN)
 	amf, _ := hex.DecodeString(AMF)
 
-	macA, _ := F1(k, opc, rand, sqn, amf)
-	res, ck, ik, ak, _ := F2345(k, opc, rand)
+	macA, _ := milenage.F1(k, opc, rand, sqn, amf)
+	res, ck, ik, ak, _ := milenage.F2345(k, opc, rand)
 
 	// Generate AUTN
 	sqnXorAK := make([]byte, 6)
