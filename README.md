@@ -27,7 +27,7 @@ const (
 	CK   = "1fd124a000b7a19e7fb17bbd9defb9bc"
 	IK   = "5d62ae7a8f34508d5dafce8eff12caf7"
 	AK   = "a3216fff22c8"
-    AUTN = "a3216fff22dd8000aad7d3010fa706fb"
+	AUTN = "a3216fff22dd8000aad7d3010fa706fb"
     
 )
 
